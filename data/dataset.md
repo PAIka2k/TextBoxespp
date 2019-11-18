@@ -1,6 +1,7 @@
-> 다운받으신 데이터셋은 이곳에 아래와 같은 형태로 저장해주세요.
+> 다운받으신 데이터셋은 이곳에 저장해주세요. 데이터셋은 아래와 같은 형태로 저장됩니다.
 
 **[Syntext dataset download](https://www.robots.ox.ac.uk/~vgg/data/scenetext/)**
+
 <br><br>
 ````
 data/SynthText/
