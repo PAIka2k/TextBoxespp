@@ -1,6 +1,6 @@
 ## TextBoxes++ Tutorial
 ---
-본 페이지는 https://github.com/mvoelk/ssd_detectors 의 코드를 차용해 만든 [TextBoxes++](https://arxiv.org/pdf/1801.02765.pdf)논문 튜토리얼입니다. scripts 폴더내의 notebook을 실행시키면 튜토리얼을 시작하실 수 있습니다.
+본 페이지는 https://github.com/mvoelk/ssd_detectors 의 코드를 차용해 만든 [TextBoxes++](https://arxiv.org/pdf/1801.02765.pdf)논문 튜토리얼입니다. scripts 폴더 내의 notebook을 실행시키면 튜토리얼을 시작하실 수 있습니다.
 
 ### DataSet
 ---
@@ -9,6 +9,6 @@
 
 ### Expected results
 ---
-본 튜토리얼을 마쳤을 때 얻을 수 있는 결과값입니다.
+본 튜토리얼을 마쳤을 때 얻을 수 있는 결과입니다.
 
 <img src="https://i.imgur.com/YgA4EJe.png" width="800">
