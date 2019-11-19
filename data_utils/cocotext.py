@@ -2,7 +2,7 @@ import numpy as np
 import json
 import os
 
-from tbpp_utils.tbpp_data import BaseGTUtility
+from utils.data import BaseGTUtility
 
 
 class GTUtility(BaseGTUtility):

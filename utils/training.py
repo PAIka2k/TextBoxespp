@@ -1,13 +1,78 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import tensorflow.keras.backend as K
 import tensorflow as tf
+import pandas as pd
 import time
 import os
 
 from tensorflow.keras.callbacks import Callback
-from tensorflow.keras.optimizers import Optimizer
+
+class TBPPFocalLoss(object):
+
+    def __init__(self, lambda_conf=1000.0, lambda_offsets=1.0):
+        self.lambda_conf = lambda_conf
+        self.lambda_offsets = lambda_offsets
+        self.metrics = []
+    
+    def compute(self, y_true, y_pred):
+        # y.shape (batches, priors, 4 x bbox_offset + 8 x quadrilaterals + 5 x rbbox_offsets + n x class_label)
+        
+        batch_size = tf.shape(y_true)[0]
+        num_priors = tf.shape(y_true)[1]
+        num_classes = tf.shape(y_true)[2] - 17
+        eps = K.epsilon()
+        
+        # confidence loss
+        conf_true = tf.reshape(y_true[:,:,17:], [-1, num_classes])
+        conf_pred = tf.reshape(y_pred[:,:,17:], [-1, num_classes])
+        
+        class_true = tf.argmax(conf_true, axis=1)
+        class_pred = tf.argmax(conf_pred, axis=1)
+        conf = tf.reduce_max(conf_pred, axis=1)
+        
+        neg_mask_float = conf_true[:,0]
+        neg_mask = tf.cast(neg_mask_float, tf.bool)
+        pos_mask = tf.logical_not(neg_mask)
+        pos_mask_float = tf.cast(pos_mask, tf.float32)
+        num_total = tf.cast(tf.shape(conf_true)[0], tf.float32)
+        num_pos = tf.reduce_sum(pos_mask_float)
+        num_neg = num_total - num_pos
+        
+        conf_loss = focal_loss(conf_true, conf_pred, alpha=[0.002, 0.998])
+        conf_loss = tf.reduce_sum(conf_loss)
+        conf_loss = conf_loss / (num_total + eps)
+        conf_loss = self.lambda_conf * conf_loss
+        
+        # offset loss, bbox, quadrilaterals, rbbox
+        loc_true = tf.reshape(y_true[:,:,0:17], [-1, 17])
+        loc_pred = tf.reshape(y_pred[:,:,0:17], [-1, 17])
+        
+        loc_loss = smooth_l1_loss(loc_true, loc_pred)
+        pos_loc_loss = tf.reduce_sum(loc_loss * pos_mask_float) # only for positives
+        loc_loss = pos_loc_loss / (num_pos + eps)
+        loc_loss = self.lambda_offsets * loc_loss
+        
+        # total loss
+        total_loss = conf_loss + loc_loss
+        
+        # metrics
+        precision, recall, accuracy, fmeasure = compute_metrics(class_true, class_pred, conf, top_k=100*batch_size)
+        
+        def make_fcn(t):
+            return lambda y_true, y_pred: t
+        for name in ['conf_loss', 
+                     'loc_loss', 
+                     'precision', 
+                     'recall',
+                     'accuracy',
+                     'fmeasure', 
+                     'num_pos',
+                     'num_neg'
+                    ]:
+            f = make_fcn(eval(name))
+            f.__name__ = name
+            self.metrics.append(f)
+        
+        return total_loss
 
 
 def square_loss(y_true, y_pred):
@@ -33,198 +98,97 @@ def smooth_l1_loss(y_true, y_pred):
         https://arxiv.org/abs/1504.08083
     """
     abs_loss = tf.abs(y_true - y_pred)
-    sq_loss = 0.5 * (y_true - y_pred)**2
+    sq_loss = 0.5 * (y_true - y_pred) ** 2
     loss = tf.where(tf.less(abs_loss, 1.0), sq_loss, abs_loss - 0.5)
-    return tf.reduce_sum(loss, axis=-1)
-
-
-def softmax_loss(y_true, y_pred):
-    """Compute cross entropy loss aka softmax loss.
-    # Arguments
-        y_true: Ground truth targets,
-            tensor of shape (?, num_boxes, num_classes).
-        y_pred: Predicted logits,
-            tensor of shape (?, num_boxes, num_classes).
-    # Returns
-        softmax_loss: Softmax loss, tensor of shape (?, num_boxes).
-    """
-    eps = K.epsilon()
-    y_pred = K.clip(y_pred, eps, 1.-eps)
-    loss = - y_true * tf.log(y_pred)
-    return tf.reduce_sum(loss, axis=-1)
-
-
-def cross_entropy_loss(y_true, y_pred):
-    """Compute binary cross entropy loss.
-    """
-    eps = K.epsilon()
-    y_pred = K.clip(y_pred, eps, 1.-eps)
-    loss = - y_true*tf.log(y_pred) - (1.-y_true)*tf.log(1.-y_pred)
     return tf.reduce_sum(loss, axis=-1)
 
 
 def focal_loss(y_true, y_pred, gamma=2., alpha=1.):
     """Compute binary focal loss.
-    
+
     # Arguments
         y_true: Ground truth targets,
             tensor of shape (?, num_boxes, num_classes).
         y_pred: Predicted logits,
             tensor of shape (?, num_boxes, num_classes).
-    
+
     # Returns
         focal_loss: Focal loss, tensor of shape (?, num_boxes).
     # References
         https://arxiv.org/abs/1708.02002
     """
-    #y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+    # y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
     eps = K.epsilon()
-    y_pred = K.clip(y_pred, eps, 1.-eps)
-    #loss = - K.pow(1-y_pred, gamma) * y_true*tf.log(y_pred) - K.pow(y_pred, gamma) * (1-y_true)*tf.log(1-y_pred)
-    pt = tf.where(tf.equal(y_true, 1.), y_pred, 1.-y_pred)
-    loss = - K.pow(1.-pt, gamma) * K.log(pt)
+    y_pred = K.clip(y_pred, eps, 1. - eps)
+    # loss = - K.pow(1-y_pred, gamma) * y_true*tf.log(y_pred) - K.pow(y_pred, gamma) * (1-y_true)*tf.log(1-y_pred)
+    pt = tf.where(tf.equal(y_true, 1.), y_pred, 1. - y_pred)
+    loss = - K.pow(1. - pt, gamma) * K.log(pt)
     loss = alpha * loss
     return tf.reduce_sum(loss, axis=-1)
 
 
-def reduced_focal_loss(y_true, y_pred, gamma=2., alpha=1., th=0.5):
-    """Compute binary reduced focal loss.
-    
-    # Arguments
-        y_true: Ground truth targets,
-            tensor of shape (?, num_boxes, num_classes).
-        y_pred: Predicted logits,
-            tensor of shape (?, num_boxes, num_classes).
-    
-    # Returns
-        reduced_focal_loss: Reduced focal loss, tensor of shape (?, num_boxes).
-    # References
-        https://arxiv.org/abs/1903.01347
+def compute_metrics(class_true, class_pred, conf, top_k=100):
+    """Compute precision, recall, accuracy and f-measure for top_k predictions.
+
+    from top_k predictions that are TP FN or FP (TN kept out)
     """
-    #y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+
+    # TODO: does this only work for one class?
+
+    top_k = tf.cast(top_k, tf.int32)
     eps = K.epsilon()
-    y_pred = K.clip(y_pred, eps, 1.-eps)
-    pt = tf.where(tf.equal(y_true, 1.), y_pred, 1.-y_pred)
-    fr = tf.where(tf.less(pt, th), K.ones_like(pt), K.pow(1.-pt, gamma)/(th**gamma))
-    loss = - fr * K.log(pt)
-    loss = alpha * loss
-    return tf.reduce_sum(loss, axis=-1)
 
+    mask = tf.greater(class_true + class_pred, 0)
+    # mask = tf.logical_or(tf.greater(class_true, 0), tf.greater(class_pred, 0))
+    mask_float = tf.cast(mask, tf.float32)
 
-class LearningRateDecay(Callback):
-    def __init__(self, methode='linear', base_lr=1e-3, n_desired=40000, desired=0.1, bias=0.0, minimum=0.1):
-        super(LearningRateDecay, self).__init__()
-        self.methode = methode
-        self.base_lr = base_lr
-        self.n_desired = n_desired
-        self.desired = desired
-        self.bias = bias
-        self.minimum = minimum
-        
-        #TODO: better naming
+    vals, idxs = tf.nn.top_k(conf * mask_float, k=top_k)
 
-    def compute_learning_rate(self, n, methode):
-        n_desired = self.n_desired
-        desired = self.desired
-        base_lr = self.base_lr
-        bias = self.bias
-        
-        offset = base_lr * desired * bias
-        base_lr = base_lr - offset
-        
-        desired = desired / (1-desired*bias) * (1-bias)
-        
-        if methode == 'default':
-            k = (1 - desired) / n_desired
-            lr = np.maximum( -k * n + 1, 0)
-        elif methode == 'linear':
-            k = (1 / desired - 1) / n_desired
-            lr = 1 / (1 + k * n)
-        elif methode == 'quadratic':
-            k = (np.sqrt(1/desired)-1) / n_desired
-            lr = 1 / (1 + k * n)**2
-        elif methode == 'exponential':
-            k = -1 * np.log(desired) / n_desired
-            lr = np.exp(-k*n)
-        
-        lr = base_lr * lr + offset
-        lr = np.maximum(lr, self.base_lr * self.minimum)
-        return lr
-        
-    def on_epoch_begin(self, epoch, logs=None):
-        self.epoch = epoch
+    top_k_class_true = tf.gather(class_true, idxs)
+    top_k_class_pred = tf.gather(class_pred, idxs)
 
-    def on_batch_begin(self, batch, logs=None):
-        self.batch = batch
-        steps_per_epoch = self.params['steps']
-        iteration = self.epoch * steps_per_epoch + batch
-        
-        lr = self.compute_learning_rate(iteration, self.methode)
-        K.set_value(self.model.optimizer.lr, lr)
+    true_mask = tf.equal(top_k_class_true, top_k_class_pred)
+    false_mask = tf.logical_not(true_mask)
+    pos_mask = tf.greater(top_k_class_pred, 0)
+    neg_mask = tf.logical_not(pos_mask)
 
-    def plot_learning_rates(self):
-        n = np.linspace(0, self.n_desired*2, 101)
-        plt.figure(figsize=[16, 6])
-        plt.plot([n[0], n[-1]], [self.base_lr*self.desired*self.bias]*2, 'k')
-        for m in ['default', 'linear', 'quadratic', 'exponential']:
-            plt.plot(n, self.compute_learning_rate(n, m))
-        plt.legend(['bias', '$-kn+1$', '$1/(1+kn)$', '$1/(1+kn)^2$', '$e^{-kn}$'])
-        plt.grid()
-        plt.xlim(0, n[-1])
-        plt.ylim(0, None)
-        plt.show()
+    tp = tf.reduce_sum(tf.cast(tf.logical_and(true_mask, pos_mask), tf.float32))
+    fp = tf.reduce_sum(tf.cast(tf.logical_and(false_mask, pos_mask), tf.float32))
+    fn = tf.reduce_sum(tf.cast(tf.logical_and(false_mask, neg_mask), tf.float32))
+    tn = tf.reduce_sum(tf.cast(tf.logical_and(true_mask, neg_mask), tf.float32))
 
+    precision = tp / (tp + fp + eps)
+    recall = tp / (tp + fn + eps)
+    accuracy = (tp + tn) / (tp + tn + fp + fn + eps)
+    fmeasure = 2 * (precision * recall) / (precision + recall + eps)
 
-class ModelSnapshot(Callback):
-    """Save the model weights after an interval of iterations."""
-    
-    def __init__(self, logdir, interval=10000, verbose=1):
-        super(ModelSnapshot, self).__init__()
-        self.logdir = logdir
-        self.interval = interval
-        self.verbose = verbose
-    
-    def on_epoch_begin(self, epoch, logs=None):
-        self.epoch = epoch
-    
-    def on_batch_begin(self, batch, logs=None):
-        self.batch = batch
-        # steps/batches/iterations
-        steps_per_epoch = self.params['steps']
-        self.iteration = self.epoch * steps_per_epoch + batch + 1
-    
-    def on_batch_end(self, batch, logs=None):
-        if self.iteration % self.interval == 0:
-            filepath = os.path.join(self.logdir, 'weights.%06i.h5' % (self.iteration))
-            if self.verbose > 0:
-                print('\nSaving model %s' % (filepath))
-            self.model.save_weights(filepath, overwrite=True)
+    return precision, recall, accuracy, fmeasure
 
 
 class Logger(Callback):
-    
+
     def __init__(self, logdir):
         super(Logger, self).__init__()
         self.logdir = logdir
-    
+
     def save_history(self):
         df = pd.DataFrame.from_dict(self.model.history.history)
         df.to_csv(os.path.join(self.logdir, 'history.csv'), index=False)
-    
+
     def append_log(self, logs):
-        data = {k:[float(logs[k])] for k in self.model.metrics_names}
+        data = {k: [float(logs[k])] for k in self.model.metrics_names}
         data['iteration'] = [self.iteration]
         data['epoch'] = [self.epoch]
         data['batch'] = [self.batch]
         data['time'] = [time.time() - self.start_time]
-        #data['lr'] = [float(K.get_value(self.model.optimizer.lr))]
+        # data['lr'] = [float(K.get_value(self.model.optimizer.lr))]
         df = pd.DataFrame.from_dict(data)
         with open(os.path.join(self.logdir, 'log.csv'), 'a') as f:
-            df.to_csv(f, header=f.tell()==0, index=False)
-    
+            df.to_csv(f, header=f.tell() == 0, index=False)
+
     def on_train_begin(self, logs=None):
         self.start_time = time.time()
-        
+
     def on_epoch_begin(self, epoch, logs=None):
         self.epoch = epoch
         self.save_history()
@@ -234,130 +198,12 @@ class Logger(Callback):
         # steps/batches/iterations
         steps_per_epoch = self.params['steps']
         self.iteration = self.epoch * steps_per_epoch + batch
-        
+
     def on_batch_end(self, batch, logs=None):
         self.append_log(logs)
-    
+
     def on_epoch_end(self, epoch, logs=None):
         pass
 
     def on_train_end(self, logs=None):
         self.save_history()
-
-
-def filter_signal(x, y, window_length=1000):
-    if type(window_length) is not int or len(y) <= window_length:
-        return [], []
-    
-    #w = np.ones(window_length) # moving average
-    w = np.hanning(window_length) # hanning window
-    
-    wlh = int(window_length/2)
-    if x is None:
-        x = np.arange(wlh, len(y)-wlh+1)
-    else:
-        x = x[wlh:len(y)-wlh+1]
-    y = np.convolve(w/w.sum(), y, mode='valid')
-    return x, y
-
-
-def plot_log(log_dir, names=None, limits=None, window_length=250, log_dir_compare=None):
-    
-    # TODO: differnet batch sizes lead to different epoch length
-    
-    if limits is None:
-        limits = slice(None)
-    elif type(limits) in [list, tuple]:
-        limits = slice(*limits)
-    
-    print(log_dir)
-    d = pd.read_csv(os.path.join('.', 'checkpoints', log_dir, 'log.csv'))
-    d = d[limits]
-    iteration = np.array(d['iteration'])
-    epoch = np.array(d['epoch'])
-    idx = np.argwhere(np.diff(epoch))[:,0] + 1
-    
-    if log_dir_compare is not None:
-        print(log_dir_compare)
-        d2 = pd.read_csv(os.path.join('.', 'checkpoints', log_dir_compare, 'log.csv'))
-        d2 = d2[limits]
-        iteration2 = np.array(d2['iteration'])
-        
-    if names is None:
-        names = set(d.keys())
-    else:
-        names = set(names)
-        names.intersection_update(set(d.keys()))
-    if log_dir_compare is not None:
-        names.intersection_update(set(d2.keys()))
-    names.difference_update({'epoch', 'batch', 'iteration', 'time'})
-    print(names)
-    
-    if 'time' in d.keys() and len(idx) > 1:
-        t = np.array(d['time'])
-        print('time per epoch %3.1f h' % ((t[idx[1]]-t[idx[0]])/3600))
-    
-    # reduce epoch ticks
-    max_ticks = 20
-    n = len(idx)
-    if n > 1:
-        n = round(n,-1*int(np.floor(np.log10(n))))
-        while n >= max_ticks:
-            if n/2 < max_ticks:
-                n /= 2
-            else:
-                if n/5 < max_ticks:
-                    n /= 5
-                else:
-                    n /= 10
-        idx_step = int(np.ceil(len(idx)/n))
-        epoch_step = epoch[idx[idx_step]] - epoch[idx[0]]
-        for first_idx in range(len(idx)):
-            if epoch[idx[first_idx]] % epoch_step == 0:
-                break
-        idx_red = [idx[i] for i in range(first_idx, len(idx), idx_step)]
-    else:
-        idx_red = idx
-    
-    for k in names:
-        plt.figure(figsize=(16, 8))
-        plt.plot(iteration, d[k], zorder=0)
-        plt.plot(*filter_signal(iteration, d[k], window_length))
-        plt.title(k, y=1.05)
-        
-        # second log
-        if log_dir_compare is not None:
-            plt.plot(iteration2, d2[k], zorder=0)
-            plt.plot(*filter_signal(iteration2, d2[k], window_length))
-            xmin = min(iteration[0], iteration2[0])
-            xmax = max(iteration[-1], iteration2[-1])
-        else:
-            xmin = iteration[0]
-            xmax = iteration[-1]
-        
-        ax1 = plt.gca()
-        ax1.set_xlim(xmin, xmax)
-        ax1.yaxis.grid(True)
-        #ax1.set_xlabel('iteration')
-        #ax1.set_yscale('linear')
-        ax1.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        ax2 = ax1.twiny()
-        ax2.xaxis.grid(True)
-        ax2.set_xticks(iteration[idx_red])
-        ax2.set_xticklabels(epoch[idx_red])
-        ax2.set_xlim(xmin, xmax)
-        #ax2.set_xlabel('epoch')
-        #ax2.set_yscale('linear')
-        ax2.get_yaxis().get_major_formatter().set_useOffset(False)
-        
-        k_end = k.split('_')[-1]
-        if k_end in ['loss']:
-            ymin = 0
-            ymax = min(np.max(d[k][np.isfinite(d[k])]), np.mean(d[k][np.isfinite(d[k])])*8)
-            ax1.set_ylim(ymin, ymax)
-        if k_end in ['precision', 'recall', 'fmeasure', 'accuracy']:
-            ax1.set_ylim(0, 1)
-        
-        plt.show()
-

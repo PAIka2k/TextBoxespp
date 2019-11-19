@@ -5,7 +5,7 @@ import numpy as np
 
 from utils.image import get_image_size
 
-from tbpp_utils.tbpp_data import BaseGTUtility
+from utils.data import BaseGTUtility
 
 
 class GTUtility(BaseGTUtility):

@@ -1,206 +1,191 @@
-"""Some utils related to Keras models."""
-
-import numpy as np
-import matplotlib.pyplot as plt
-import tensorflow.keras.backend as K
-import h5py
-import os
-
-
-def load_weights(model, filepath, layer_names=None):
-    """Loads layer weights from a HDF5 save file.
-     
-    # Arguments
-        model: Keras model
-        filepath: Path to HDF5 file
-        layer_names: List of strings, names of the layers for which the 
-            weights should be loaded. List of tuples 
-            (name_in_file, name_in_model), if the names in the file differ 
-            from those in model.
-    """
-    filepath = os.path.expanduser(filepath)
-    f = h5py.File(filepath, 'r')
-    if layer_names == None:
-        layer_names = [s.decode() for s in f.attrs['layer_names']]
-    for name in layer_names:
-        if type(name) in [tuple, list]:
-            layer_name = name[1]
-            name = name[0]
-        else:
-            layer_name = name
-        g = f[name]
-        weights = [np.array(g[wn]) for wn in g.attrs['weight_names']]
-        try:
-            layer = model.get_layer(layer_name)
-            #assert layer is not None
-        except:
-            print('layer missing %s' % (layer_name))
-            print('    file  %s' % ([w.shape for w in weights]))
-            continue
-        try:
-            #print('load %s' % (layer_name))
-            layer.set_weights(weights)
-        except Exception as e:
-            print('something went wrong %s' % (layer_name))
-            print('    model %s' % ([w.shape.as_list() for w in layer.weights]))
-            print('    file  %s' % ([w.shape for w in weights]))
-            print(e)
-    f.close()
+from tensorflow.python.keras.layers import Activation
+from tensorflow.python.keras.layers import Conv2D
+from tensorflow.python.keras.layers import Flatten
+from tensorflow.python.keras.layers import Input
+from tensorflow.python.keras.layers import MaxPooling2D
+from tensorflow.python.keras.layers import concatenate
+from tensorflow.python.keras.layers import Reshape
+from tensorflow.python.keras.layers import ZeroPadding2D
+from tensorflow.python.keras.models import Model
+from tensorflow.python.keras.layers import Layer
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras.initializers import Constant
 
 
-def calc_memory_usage(model, batch_size=1):
-    """Compute the memory usage of a keras modell.
+def ssd384_body(x):
     
-    # Arguments
-        model: Keras model.
-        batch_size: Batch size used for training.
+    source_layers = []
     
-    source: https://stackoverflow.com/a/46216013/445710
-    """
+    # Block 1
+    x = Conv2D(64, 3, strides=1, padding='same', name='conv1_1', activation='relu')(x)
+    x = Conv2D(64, 3, strides=1, padding='same', name='conv1_2', activation='relu')(x)
+    x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool1')(x)
+    # Block 2
+    x = Conv2D(128, 3, strides=1, padding='same', name='conv2_1', activation='relu')(x)
+    x = Conv2D(128, 3, strides=1, padding='same', name='conv2_2', activation='relu')(x)
+    x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool2')(x)
+    # Block 3
+    x = Conv2D(256, 3, strides=1, padding='same', name='conv3_1', activation='relu')(x)
+    x = Conv2D(256, 3, strides=1, padding='same', name='conv3_2', activation='relu')(x)
+    x = Conv2D(256, 3, strides=1, padding='same', name='conv3_3', activation='relu')(x)
+    x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool3')(x)
+    # Block 4
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv4_1', activation='relu')(x)
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv4_2', activation='relu')(x)
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv4_3', activation='relu')(x)
+    source_layers.append(x)
+    x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool4')(x)
+    # Block 5
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv5_1', activation='relu')(x)
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv5_2', activation='relu')(x)
+    x = Conv2D(512, 3, strides=1, padding='same', name='conv5_3', activation='relu')(x)
+    x = MaxPooling2D(pool_size=3, strides=1, padding='same', name='pool5')(x)
+    # FC6
+    x = Conv2D(1024, 3, strides=1, dilation_rate=(6, 6), padding='same', name='fc6', activation='relu')(x)
+    # FC7
+    x = Conv2D(1024, 1, strides=1, padding='same', name='fc7', activation='relu')(x)
+    source_layers.append(x)
+    # Block 6
+    x = Conv2D(256, 1, strides=1, padding='same', name='conv6_1', activation='relu')(x)
+    x = ZeroPadding2D((1,1))(x)
+    x = Conv2D(512, 3, strides=2, padding='valid', name='conv6_2', activation='relu')(x)
+    source_layers.append(x)
+    # Block 7
+    x = Conv2D(128, 1, strides=1, padding='same', name='conv7_1', activation='relu')(x)
+    x = ZeroPadding2D((1,1))(x)
+    x = Conv2D(256, 3, strides=2, padding='valid', name='conv7_2', activation='relu')(x)
+    source_layers.append(x)
+    # Block 8
+    x = Conv2D(128, 1, strides=1, padding='same', name='conv8_1', activation='relu')(x)
+    x = Conv2D(256, 3, strides=1, padding='valid', name='conv8_2', activation='relu')(x)
+    source_layers.append(x)
+    # Block 9
+    x = Conv2D(128, 1, strides=1, padding='same', name='conv9_1', activation='relu')(x)
+    x = Conv2D(256, 3, strides=1, padding='valid', name='conv9_2', activation='relu')(x)
+    source_layers.append(x)
+    
+    return source_layers
 
-    shapes_mem_count = 0
-    for l in model.layers:
-        shapes_mem_count += np.sum([np.sum([np.prod(s[1:]) for s in n.output_shapes]) for n in l._inbound_nodes])
+
+def multibox_head(source_layers, num_priors, normalizations=None, softmax=True):
+    
+    num_classes = 2
+    class_activation = 'softmax' if softmax else 'sigmoid'
+
+    mbox_conf = []
+    mbox_loc = []
+    mbox_quad = []
+    mbox_rbox = []
+    for i in range(len(source_layers)):
+        x = source_layers[i]
+        name = x.name.split('/')[0]
         
-    trainable_count = np.sum([K.count_params(p) for p in set(model.trainable_weights)])
-    non_trainable_count = np.sum([K.count_params(p) for p in set(model.non_trainable_weights)])
-    
-    # each shape unit occupies 4 bytes in memory
-    total_memory = 4.0 * batch_size * (shapes_mem_count + trainable_count + non_trainable_count)
-    
-    for s in ['Byte', 'KB', 'MB', 'GB', 'TB']:
-        if total_memory > 1024:
-            total_memory /= 1024
-        else:
-            break
-    print('model memory usage %8.2f %s' % (total_memory, s))
-
-
-def count_parameters(model):
-    trainable_count = int(np.sum([K.count_params(p) for p in set(model.trainable_weights)]))
-    non_trainable_count = int(np.sum([K.count_params(p) for p in set(model.non_trainable_weights)]))
-    
-    print('trainable     {:>16,d}'.format(trainable_count))
-    print('non-trainable {:>16,d}'.format(non_trainable_count))
-
-
-def plot_parameter_statistic(model, layer_types=['Dense', 'Conv2D'], trainable=True, non_trainable=True, outputs=False):
-    layer_types = [l.__name__ if type(l) == type else l for l in layer_types]
-    
-    def get_layers_recursion(model):
-        layers = []
-        for l in model.layers:
-            if l.__class__.__name__ is 'Model':
-                child_layers = get_layers_recursion(l)
-            else:
-                child_layers = [l]
-            for cl in child_layers:
-                if cl not in layers:
-                    layers.append(cl)
-        return layers
-    
-    layers = get_layers_recursion(model)
-    
-    layers = [l for l in layers if l.__class__.__name__ in layer_types]
-    names = [l.name for l in layers]
-    y = range(len(names))
-    
-    plt.figure(figsize=[12,max(len(y)//4,1)])
-    
-    offset = np.zeros(len(layers), dtype=int)
-    legend = []
-    if trainable:
-        counts_trainable = [np.sum([K.count_params(p) for p in set(l.trainable_weights)]) for l in layers]
-        plt.barh(y, counts_trainable, align='center', color='#1f77b4')
-        offset += np.array(counts_trainable, dtype=int)
-        legend.append('trainable')
-    if non_trainable:
-        counts_non_trainable = [np.sum([K.count_params(p) for p in set(l.non_trainable_weights)]) for l in layers]
-        plt.barh(y, counts_non_trainable, align='center', color='#ff7f0e',  left=offset)
-        offset += np.array(counts_non_trainable, dtype=int)
-        legend.append('non-trainable')
-    if outputs:
-        counts_outputs = [np.sum([np.sum([np.prod(s[1:]) for s in n.output_shapes]) for n in l._inbound_nodes]) for l in layers]
-        plt.barh(y, counts_outputs, align='center', color='#2ca02c', left=offset)
-        offset += np.array(counts_outputs, dtype=int)
-        legend.append('outputs')
-        
-    plt.yticks(y, names)
-    plt.ylim(y[0]-1, y[-1]+1)
-    ax = plt.gca()
-    ax.invert_yaxis()
-    ax.xaxis.tick_top()
-    plt.legend(legend)
-    plt.show()
-
-
-def calc_receptive_field(model, layer_name, verbose=False):
-    """Calculate the receptive field related to a certain layer.
-    
-    # Arguments
-        model: Keras model.
-        layer_name: Name of the layer.
-    
-    # Return
-        rf: Receptive field (w, h).
-        es: Effictive stides in the input image.
-        offset: Center of the receptive field associated with the first unit (x, y).
-    """
-    # TODO...
-    
-    fstr = '%-20s %-16s %-10s %-10s %-10s %-16s %-10s %-16s'
-    if verbose:
-        print(fstr % ('name', 'type', 'kernel', 'stride', 'dilation', 'receptive field', 'offset', 'effective stride'))
-    l = model.get_layer(layer_name)
-    rf = np.ones(2)
-    es = np.ones(2)
-    offset = np.zeros(2)
-    
-    while True:
-        layer_type = l.__class__.__name__
-        k, s, d = (1,1), (1,1), (1,1)
-        p = 'same'
-        if layer_type in ['Conv2D']:
-            k = l.kernel_size
-            d = l.dilation_rate
-            s = l.strides
-            p = l.padding
-        elif layer_type in ['MaxPooling2D', 'AveragePooling2D']:
-            k = l.pool_size
-            s = l.strides
-            p = l.padding
-        elif layer_type in ['ZeroPadding2D']:
-            p = l.padding
-        elif layer_type in ['InputLayer', 'Activation', 'BatchNormalization']:
-            pass
-        else:
-            print('unknown layer type %s %s' % (l.name, layer_type))
+        # normalize
+        if normalizations is not None and normalizations[i] > 0:
+            name = name + '_norm'
+            x = Normalize(normalizations[i], name=name)(x)
             
-        k = np.array(k)
-        s = np.array(s)
-        d = np.array(d)
-        
-        ek = k + (k-1)*(d-1) # effective kernel size
-        rf = rf * s + (ek-s)
-        es = es * s
-        
-        if p == 'valid':
-            offset += ek/2
-            print(ek/2, offset)
-        if type(p) == tuple:
-            offset -= [p[0][0], p[1][0]]
-            print([p[0][0], p[1][0]], offset)
-        
-        rf = rf.astype(int)
-        es = es.astype(int)
-        #offset = offset.astype(int)
-        if verbose:
-            print(fstr % (l.name, l.__class__.__name__, k, s, d, rf, offset, es))
-        
-        if layer_type == 'InputLayer':
-            break
-        
-        input_name = l.input.name.split('/')[0]
-        input_name = input_name.split(':')[0]
-        l = model.get_layer(input_name)
+        # confidence
+        name1 = name + '_mbox_conf'
+        x1 = Conv2D(num_priors[i] * num_classes, (3, 5), padding='same', name=name1)(x)
+        x1 = Flatten(name=name1+'_flat')(x1)
+        mbox_conf.append(x1)
 
+        # location, Delta(x,y,w,h)
+        name2 = name + '_mbox_loc'
+        x2 = Conv2D(num_priors[i] * 4, (3, 5), padding='same', name=name2)(x)
+        x2 = Flatten(name=name2+'_flat')(x2)
+        mbox_loc.append(x2)
+        
+        # quadrilateral, Delta(x1,y1,x2,y2,x3,y3,x4,y4)
+        name3 = name + '_mbox_quad'
+        x3 = Conv2D(num_priors[i] * 8, (3, 5), padding='same', name=name3)(x)
+        x3 = Flatten(name=name3+'_flat')(x3)
+        mbox_quad.append(x3)
+
+        # rotated rectangle, Delta(x1,y1,x2,y2,h)
+        name4 = name + '_mbox_rbox'
+        x4 = Conv2D(num_priors[i] * 5, (3, 5), padding='same', name=name4)(x)
+        x4 = Flatten(name=name4+'_flat')(x4)
+        mbox_rbox.append(x4)
+        
+    mbox_conf = concatenate(mbox_conf, axis=1, name='mbox_conf')
+    mbox_conf = Reshape((-1, num_classes), name='mbox_conf_logits')(mbox_conf)
+    mbox_conf = Activation(class_activation, name='mbox_conf_final')(mbox_conf)
+    
+    mbox_loc = concatenate(mbox_loc, axis=1, name='mbox_loc')
+    mbox_loc = Reshape((-1, 4), name='mbox_loc_final')(mbox_loc)
+    
+    mbox_quad = concatenate(mbox_quad, axis=1, name='mbox_quad')
+    mbox_quad = Reshape((-1, 8), name='mbox_quad_final')(mbox_quad)
+    
+    mbox_rbox = concatenate(mbox_rbox, axis=1, name='mbox_rbox')
+    mbox_rbox = Reshape((-1, 5), name='mbox_rbox_final')(mbox_rbox)
+
+    predictions = concatenate([mbox_loc, mbox_quad, mbox_rbox, mbox_conf], axis=2, name='predictions')
+    
+    return predictions
+
+
+def TBPP384(input_shape=(384, 384, 3), softmax=True):
+    """TextBoxes++384 architecture.
+
+    # Arguments
+        input_shape: Shape of the input image.
+    
+    # References
+        - [TextBoxes++: A Single-Shot Oriented Scene Text Detector](https://arxiv.org/abs/1801.02765)
+    """
+    
+    # SSD body
+    x = input_tensor = Input(shape=input_shape)
+    source_layers = ssd384_body(x)
+    
+    num_maps = len(source_layers)
+    
+    # Add multibox head for classification and regression
+    num_priors = [14] * num_maps
+    normalizations = [1] * num_maps
+    output_tensor = multibox_head(source_layers, num_priors, normalizations, softmax)
+    model = Model(input_tensor, output_tensor)
+    
+    # parameters for prior boxes
+    model.image_size = input_shape[:2]
+    model.source_layers = source_layers
+    
+    model.aspect_ratios = [[1,2,3,5,1/2,1/3,1/5] * 2] * num_maps
+    #model.shifts = [[(0.0, 0.0)] * 7 + [(0.0, 0.5)] * 7] * num_maps
+    model.shifts = [[(0.0, -0.25)] * 7 + [(0.0, 0.25)] * 7] * num_maps
+    model.special_ssd_boxes = False
+    model.scale = 0.5
+    
+    return model
+
+
+class Normalize(Layer):
+    """Normalization layer as described in ParseNet paper.
+    # Arguments
+        scale: Default feature scale.
+    # Input shape
+        4D tensor with shape: (samples, rows, cols, channels)
+    # Output shape
+        Same as input
+    # References
+        http://cs.unc.edu/~wliu/papers/parsenet.pdf
+    # TODO
+        Add possibility to have one scale for all features.
+    """
+
+    def __init__(self, scale=20, **kwargs):
+        self.scale = scale
+        super(Normalize, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.gamma = self.add_weight(name=self.name + '_gamma',
+                                     shape=(input_shape[-1],),
+                                     initializer=Constant(self.scale),
+                                     trainable=True)
+        super(Normalize, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        return self.gamma * K.l2_normalize(x, axis=-1)
