@@ -3,4 +3,4 @@ matplotlib
 
 tqdm
 pyclipper
-glob
+glob3
