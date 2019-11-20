@@ -16,19 +16,19 @@ print(platform.python_version())
 ```
 
 * 텐서플로우 버전 설정
-```
+```python
 # Textboxes++은 tensorflow 2.0대 버전을 지원하지 않습니다.
 pip install --ignore--installed --upgrade tensorflow==1.14 # GPU환경일 경우 tensorflow-gpu==1.14
 ```
 
 * 영상 처리 라이브러리
-```
+```python
 # opencv-python 설치
 pip install opencv-python
 ```
 
 * 기타 필수 라이브러리 설치
-```
+```python
 pip install -r requirements.txt
 ```
 
