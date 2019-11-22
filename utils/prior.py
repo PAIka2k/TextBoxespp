@@ -25,11 +25,11 @@ class PriorMap(object):
             the borders of the input image.
         step
         minmax_size: List of tuples with s_min and s_max values (see paper).
-        special_ssd_box: Boolean, wether or not the extra box for aspect
+        special_ssd_box: Boolean, whether or not the extra box for aspect
             ratio 1 is used.
 
     # Notes
-        The compute_priors methode has to be called to get usable prior boxes.
+        The compute_priors method has to be called to get usable prior boxes.
     """
 
     def __init__(self, source_layer_name, image_size, map_size,
@@ -76,9 +76,9 @@ class PriorMap(object):
 
         # define centers of prior boxes
         if self.step is None:
-            step_x = image_w / map_w
-            step_y = image_h / map_h
-            assert step_x % 1 == 0 and step_y % 1 == 0, 'map size %s not constiten with input height %s' % (
+            step_x = int(np.floor(image_w / map_w))
+            step_y = int(np.floor(image_h / map_h))
+            assert step_x % 1 == 0 and step_y % 1 == 0, 'map size %s not consistent with input height %s' % (
             map_size, image_size)
         else:
             step_x = step_y = self.step

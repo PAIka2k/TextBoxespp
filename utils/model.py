@@ -13,9 +13,8 @@ from tensorflow.python.keras.initializers import Constant
 
 
 def ssd384_body(x):
-    
     source_layers = []
-    
+
     # Block 1
     x = Conv2D(64, 3, strides=1, padding='same', name='conv1_1', activation='relu')(x)
     x = Conv2D(64, 3, strides=1, padding='same', name='conv1_2', activation='relu')(x)
@@ -33,6 +32,7 @@ def ssd384_body(x):
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_1', activation='relu')(x)
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_2', activation='relu')(x)
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_3', activation='relu')(x)
+    print(f"block 4 : {x.shape}")
     source_layers.append(x)
     x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool4')(x)
     # Block 5
@@ -44,26 +44,31 @@ def ssd384_body(x):
     x = Conv2D(1024, 3, strides=1, dilation_rate=(6, 6), padding='same', name='fc6', activation='relu')(x)
     # FC7
     x = Conv2D(1024, 1, strides=1, padding='same', name='fc7', activation='relu')(x)
+    print(f"FC 7 : {x.shape}")
     source_layers.append(x)
     # Block 6
     x = Conv2D(256, 1, strides=1, padding='same', name='conv6_1', activation='relu')(x)
-    x = ZeroPadding2D((1,1))(x)
+    x = ZeroPadding2D((1, 1))(x)
     x = Conv2D(512, 3, strides=2, padding='valid', name='conv6_2', activation='relu')(x)
+    print(f"block 6 : {x.shape}")
     source_layers.append(x)
     # Block 7
     x = Conv2D(128, 1, strides=1, padding='same', name='conv7_1', activation='relu')(x)
-    x = ZeroPadding2D((1,1))(x)
+    x = ZeroPadding2D((1, 1))(x)
     x = Conv2D(256, 3, strides=2, padding='valid', name='conv7_2', activation='relu')(x)
+    print(f"block 7 : {x.shape}")
     source_layers.append(x)
     # Block 8
     x = Conv2D(128, 1, strides=1, padding='same', name='conv8_1', activation='relu')(x)
     x = Conv2D(256, 3, strides=1, padding='valid', name='conv8_2', activation='relu')(x)
+    print(f"block 8 : {x.shape}")
     source_layers.append(x)
     # Block 9
     x = Conv2D(128, 1, strides=1, padding='same', name='conv9_1', activation='relu')(x)
     x = Conv2D(256, 3, strides=1, padding='valid', name='conv9_2', activation='relu')(x)
+    print(f"block 9 : {x.shape}")
     source_layers.append(x)
-    
+
     return source_layers
 
 
