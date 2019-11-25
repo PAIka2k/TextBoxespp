@@ -36,7 +36,7 @@ $ pip install -r requirements.txt
 ## 데이터 셋
 
 튜토리얼에 사용된 데이터 셋은 [Synthtext](https://www.robots.ox.ac.uk/~vgg/data/scenetext/)데이터 셋으로, 7,266,866개의 단어들로 이루어진 858,750장의 합성 이미지 파일이 200개의 폴더에 나누어져 담겨있으며 Ground-truth annotation은 gt.mat파일에 담겨있습니다.<br><br>
-데이터셋은 다운받으신 후 `data` 폴더에 넣어주세요.
+데이터셋은 다운받으신 후 압축을 풀어 `data` 폴더에 넣어주세요.
 
 ## Expected results
 
