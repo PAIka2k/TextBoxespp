@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 
 
 def to_rec(box, image_size):
-    """Finds minimum rectangle around some points and scales it to desired 
+    """
+    Finds minimum rectangle around some points and scales it to desired
     image size.
     
     # Arguments

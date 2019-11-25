@@ -3,13 +3,11 @@
 # %%
 import numpy as np
 import pyclipper
-#from shapely import geometry
 from numpy.linalg import norm
-
+from tensorflow.python.keras import backend as K
 eps = 1e-10
 
 
-# %%
 def polygon_to_rbox(xy):
     # center point plus width, height and orientation angle
     tl, tr, br, bl = xy
@@ -21,11 +19,15 @@ def polygon_to_rbox(xy):
     w = (norm(dt) + norm(db)) / 2.
     # height is distance from center to top edge plus distance form center to bottom edge
     h = norm(np.cross(dt, tl-c))/(norm(dt)+eps) + norm(np.cross(db, br-c))/(norm(db)+eps)
-    #h = point_line_distance(c, tl, tr) +  point_line_distance(c, br, bl)
-    #h = (norm(tl-bl) + norm(tr-br)) / 2.
     # angle is mean of top and bottom edge angle
     theta = (np.arctan2(dt[0], dt[1]) + np.arctan2(db[0], db[1])) / 2.
     return np.array([cx, cy, w, h, theta])
+
+
+def rot_matrix(theta):
+    ct, st = np.cos(theta), np.sin(theta)
+    return np.array([[ct, -st],[st, ct]])
+
 
 def rbox_to_polygon(rbox):
     cx, cy, w, h, theta = rbox
@@ -35,9 +37,9 @@ def rbox_to_polygon(rbox):
     return box
 
 
-# %%
 def fscore(precision, recall, beta=1):
-    """Computes the F score.
+    """
+    Computes the F score.
     
     The F score is the weighted harmonic mean of precision and recall.
     
@@ -61,8 +63,7 @@ def fscore(precision, recall, beta=1):
     # Return
         score: Array of same shape as precision and recall.
     """
-    #eps = K.epsilon()
-    eps = 1e-10
+    eps = K.epsilon()
     p = precision
     r = recall
     bb = beta ** 2
@@ -70,9 +71,9 @@ def fscore(precision, recall, beta=1):
     return score
 
 
-# %%
 def evaluate_polygonal_results(ground_truth, detection_results, iou_thresh=0.5):
-    """Evaluate polygonal text detection results and return TP, FP, FN.
+    """
+    Evaluate polygonal text detection results and return TP, FP, FN.
     
     # Arguments
         ground_truth: List of ground truth polygonal with
@@ -106,15 +107,11 @@ def evaluate_polygonal_results(ground_truth, detection_results, iou_thresh=0.5):
         gt_polys = [np.reshape(gt[i][j,:], (-1, 2)) for j in range(len(gt[i]))]
         dt_polys = [np.reshape(dt[i][j,:], (-1, 2)) for j in range(len(dt[i]))]
         
-        # prepare polygones, pyclipper, is much faster
+        # prepare polygons, pyclipper, is much faster
         scale = 1e5
         gt_polys = [np.asarray(p*scale, dtype=np.int64) for p in gt_polys]
         dt_polys = [np.asarray(p*scale, dtype=np.int64) for p in dt_polys]
-        
-        # perpare polygones, shapely
-        #gt_polys = [geometry.Polygon(p) for p in gt_polys]
-        #dt_polys = [geometry.Polygon(p) for p in dt_polys]
-        
+
         num_dt = len(dt_polys)
         num_gt = len(gt_polys)
         
@@ -144,24 +141,14 @@ def evaluate_polygonal_results(ground_truth, detection_results, iou_thresh=0.5):
                     IoU = Ia / Ua
                 else:
                     IoU = 0.0
-                
-                # intersection over union, shapely, much slower
-                #I = poly1.intersection(poly2)
-                #if not I.is_empty:
-                #    Ia = I.area
-                #    Ua = poly1.area + poly2.area - Ia
-                #    IoU = Ia / Ua
-                #else:
-                #    IoU =  0.0
-                
+
                 gt_iou.append(IoU)
-                #print(IoU)
             gt_iou = np.array(gt_iou)
             max_gt_idx = np.argmax(gt_iou)
             dt_idx = k
             
             if gt_iou[max_gt_idx] > iou_thresh:
-                if not assignment[max_gt_idx]: # todo: use highest iou, not first
+                if not assignment[max_gt_idx]:
                     TP_img[dt_idx] = 1
                     assignment[max_gt_idx] = True
                     continue

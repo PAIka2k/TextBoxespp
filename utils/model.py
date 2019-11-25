@@ -32,7 +32,6 @@ def ssd384_body(x):
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_1', activation='relu')(x)
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_2', activation='relu')(x)
     x = Conv2D(512, 3, strides=1, padding='same', name='conv4_3', activation='relu')(x)
-    print(f"block 4 : {x.shape}")
     source_layers.append(x)
     x = MaxPooling2D(pool_size=2, strides=2, padding='same', name='pool4')(x)
     # Block 5
@@ -44,29 +43,24 @@ def ssd384_body(x):
     x = Conv2D(1024, 3, strides=1, dilation_rate=(6, 6), padding='same', name='fc6', activation='relu')(x)
     # FC7
     x = Conv2D(1024, 1, strides=1, padding='same', name='fc7', activation='relu')(x)
-    print(f"FC 7 : {x.shape}")
     source_layers.append(x)
     # Block 6
     x = Conv2D(256, 1, strides=1, padding='same', name='conv6_1', activation='relu')(x)
     x = ZeroPadding2D((1, 1))(x)
     x = Conv2D(512, 3, strides=2, padding='valid', name='conv6_2', activation='relu')(x)
-    print(f"block 6 : {x.shape}")
     source_layers.append(x)
     # Block 7
     x = Conv2D(128, 1, strides=1, padding='same', name='conv7_1', activation='relu')(x)
     x = ZeroPadding2D((1, 1))(x)
     x = Conv2D(256, 3, strides=2, padding='valid', name='conv7_2', activation='relu')(x)
-    print(f"block 7 : {x.shape}")
     source_layers.append(x)
     # Block 8
     x = Conv2D(128, 1, strides=1, padding='same', name='conv8_1', activation='relu')(x)
     x = Conv2D(256, 3, strides=1, padding='valid', name='conv8_2', activation='relu')(x)
-    print(f"block 8 : {x.shape}")
     source_layers.append(x)
     # Block 9
     x = Conv2D(128, 1, strides=1, padding='same', name='conv9_1', activation='relu')(x)
     x = Conv2D(256, 3, strides=1, padding='valid', name='conv9_2', activation='relu')(x)
-    print(f"block 9 : {x.shape}")
     source_layers.append(x)
 
     return source_layers
@@ -133,7 +127,8 @@ def multibox_head(source_layers, num_priors, normalizations=None, softmax=True):
 
 
 def TBPP384(input_shape=(384, 384, 3), softmax=True):
-    """TextBoxes++384 architecture.
+    """
+    TextBoxes++384 architecture.
 
     # Arguments
         input_shape: Shape of the input image.
@@ -159,7 +154,6 @@ def TBPP384(input_shape=(384, 384, 3), softmax=True):
     model.source_layers = source_layers
     
     model.aspect_ratios = [[1,2,3,5,1/2,1/3,1/5] * 2] * num_maps
-    #model.shifts = [[(0.0, 0.0)] * 7 + [(0.0, 0.5)] * 7] * num_maps
     model.shifts = [[(0.0, -0.25)] * 7 + [(0.0, 0.25)] * 7] * num_maps
     model.special_ssd_boxes = False
     model.scale = 0.5
@@ -168,7 +162,8 @@ def TBPP384(input_shape=(384, 384, 3), softmax=True):
 
 
 class Normalize(Layer):
-    """Normalization layer as described in ParseNet paper.
+    """
+    Normalization layer as described in ParseNet paper.
     # Arguments
         scale: Default feature scale.
     # Input shape

@@ -9,7 +9,8 @@ from tqdm import tqdm
 
 
 class PriorMap(object):
-    """Handles prior boxes for a given feature map.
+    """
+    Handles prior boxes for a given feature map.
 
     # Arguments / Attributes
         source_layer_name
@@ -19,7 +20,7 @@ class PriorMap(object):
         aspect_ratios: List of aspect ratios for the prior boxes at each
             location.
         shift: List of tuples for the displacement of the prior boxes
-            relative to ther location. Each tuple contains an value between
+            relative to the location. Each tuple contains an value between
             -1.0 and 1.0 for x and y direction.
         clip: Boolean, whether the boxes should be cropped to do not exceed
             the borders of the input image.
@@ -320,7 +321,7 @@ class PriorUtil(object):
 
         gt_iou = np.array([iou(b, self.priors_norm) for b in gt_boxes]).T
 
-        # assigne gt to priors
+        # assign gt to priors
         max_idxs = np.argmax(gt_iou, axis=1)
         max_val = gt_iou[np.arange(num_priors), max_idxs]
         prior_mask = max_val > overlap_threshold
@@ -470,7 +471,8 @@ class PriorUtil(object):
         return results
 
     def compute_class_weights(self, gt_util, num_samples=np.inf):
-        """Computes weighting factors for the classification loss by considering
+        """
+        Computes weighting factors for the classification loss by considering
         the inverse frequency of class instance in local ground truth.
         """
         s = np.zeros(gt_util.num_classes)
@@ -481,7 +483,8 @@ class PriorUtil(object):
         return si / np.sum(si) * len(s)
 
     def show_image(self, img):
-        """Resizes an image to the network input size and shows it in the current figure.
+        """
+        Resize an image to the network input size and shows it in the current figure.
         """
         image_wh = self.image_size[::-1]
         img = cv2.resize(img, image_wh, cv2.INTER_LINEAR)

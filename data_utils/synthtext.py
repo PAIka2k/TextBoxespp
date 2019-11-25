@@ -9,7 +9,8 @@ from utils.data import BaseGTUtility
 
 
 class GTUtility(BaseGTUtility):
-    """Utility for SynthText dataset.
+    """
+    Utility for SynthText dataset.
     # Arguments
         data_path: Path to ground truth and image data.
         max_slope: Maximum slope of text lines. Boxes with slope lower 
@@ -23,7 +24,7 @@ class GTUtility(BaseGTUtility):
         self.image_path = image_path = data_path
         self.classes = ['Background', 'Text']
         
-        print('loding ground truth data...')
+        print('loading ground truth data...')
         data = sio.loadmat(gt_path)
         num_samples = data['imnames'].shape[1]
         

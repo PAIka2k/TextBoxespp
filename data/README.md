@@ -2,8 +2,6 @@
 
 <다운로드 링크> <br>
 Syntext   : **[Syntext dataset download](https://www.robots.ox.ac.uk/~vgg/data/scenetext/)** <br>
-COCOtext  : **[COCOtext dataset download](https://rrc.cvc.uab.es/?ch=5&com=downloads)** <br>
-ICDAR2015 : **[ICDAR2015 dataset download](https://rrc.cvc.uab.es/?ch=4&com=downloads)** 
 ````
 data/SynthText/
         |- 1/

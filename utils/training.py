@@ -3,8 +3,8 @@ import tensorflow as tf
 import pandas as pd
 import time
 import os
-
 from tensorflow.keras.callbacks import Callback
+
 
 class TBPPFocalLoss(object):
 
@@ -14,7 +14,7 @@ class TBPPFocalLoss(object):
         self.metrics = []
     
     def compute(self, y_true, y_pred):
-        # y.shape (batches, priors, 4 x bbox_offset + 8 x quadrilaterals + 5 x rbbox_offsets + n x class_label)
+        # y.shape (batches, priors, 4 x bbox_offset + 8 x quadrilaterals + 5 x rbox_offsets + n x class_label)
         
         batch_size = tf.shape(y_true)[0]
         num_priors = tf.shape(y_true)[1]
@@ -42,7 +42,7 @@ class TBPPFocalLoss(object):
         conf_loss = conf_loss / (num_total + eps)
         conf_loss = self.lambda_conf * conf_loss
         
-        # offset loss, bbox, quadrilaterals, rbbox
+        # offset loss, bbox, quadrilaterals, rbox
         loc_true = tf.reshape(y_true[:,:,0:17], [-1, 17])
         loc_pred = tf.reshape(y_pred[:,:,0:17], [-1, 17])
         
@@ -86,7 +86,8 @@ def absolute_loss(y_true, y_pred):
 
 
 def smooth_l1_loss(y_true, y_pred):
-    """Compute L1-smooth loss.
+    """
+    Compute L1-smooth loss.
     # Arguments
         y_true: Ground truth bounding boxes,
             tensor of shape (?, num_boxes, 4).
@@ -104,7 +105,8 @@ def smooth_l1_loss(y_true, y_pred):
 
 
 def focal_loss(y_true, y_pred, gamma=2., alpha=1.):
-    """Compute binary focal loss.
+    """
+    Compute binary focal loss.
 
     # Arguments
         y_true: Ground truth targets,
@@ -128,13 +130,11 @@ def focal_loss(y_true, y_pred, gamma=2., alpha=1.):
 
 
 def compute_metrics(class_true, class_pred, conf, top_k=100):
-    """Compute precision, recall, accuracy and f-measure for top_k predictions.
+    """
+    Compute precision, recall, accuracy and f-measure for top_k predictions.
 
     from top_k predictions that are TP FN or FP (TN kept out)
     """
-
-    # TODO: does this only work for one class?
-
     top_k = tf.cast(top_k, tf.int32)
     eps = K.epsilon()
 

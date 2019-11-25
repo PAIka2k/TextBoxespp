@@ -13,10 +13,10 @@ eps = 1e-10
 class BaseGTUtility(object):
     """Base class for handling datasets.
     
-    Derived classes should implement the following attributes and call the init methode:
+    Derived classes should implement the following attributes and call the init method:
         gt_path         str
         image_path      str
-        classes         list of str, first class is normaly 'Background'
+        classes         list of str, first class is normally 'Background'
         image_names     list of str
         data            list of array (boxes, n * xy + one_hot_class)
     optional attributes are:
@@ -28,7 +28,7 @@ class BaseGTUtility(object):
         self.classes = []
         self.image_names = []
         self.data = []
-        
+
     def init(self):
         self.num_classes = len(self.classes)
         self.classes_lower = [s.lower() for s in self.classes]
@@ -38,7 +38,6 @@ class BaseGTUtility(object):
         stats = np.zeros(self.num_classes)
         num_without_annotation = 0
         for i in range(len(self.data)):
-            #stats += np.sum(self.data[i][:,-self.num_classes:], axis=0)
             if len(self.data[i]) == 0:
                 num_without_annotation += 1
             else:
@@ -105,8 +104,9 @@ class BaseGTUtility(object):
         plt.imshow(img)
     
     def sample(self, idx=None, preserve_aspect_ratio=False, aspect_ratio=1.0):
-        '''Draw a random sample form the dataset.
-        '''
+        """
+        Draw a random sample form the dataset.
+        """
         if idx is None:
             idx = np.random.randint(0, len(self.image_names))
         file_path = os.path.join(self.image_path, self.image_names[idx])
@@ -118,7 +118,8 @@ class BaseGTUtility(object):
         return idx, img, self.data[idx]
     
     def sample_random_batch(self, batch_size=32, input_size=(384,384), seed=1337, preserve_aspect_ratio=False):
-        '''Draws a batch of random samples from the dataset.
+        """
+        Draws a batch of random samples from the dataset.
         
         # Arguments
             batch_size: The batch size.
@@ -131,7 +132,7 @@ class BaseGTUtility(object):
             inputs: List of preprocessed input images (BGR).
             images: List of normalized images for visualization (RGB).
             data: List of Ground Truth data, arrays with bounding boxes and class label.
-        '''
+        """
         h, w = input_size
         aspect_ratio = w/h
         if seed is not None:
@@ -151,7 +152,7 @@ class BaseGTUtility(object):
                 gt = self.data[i]
             
             inputs.append(preprocess(img, input_size))
-            img = cv2.resize(img, (w,h), cv2.INTER_LINEAR).astype('float32') # should we do resizing
+            img = cv2.resize(img, (w,h), cv2.INTER_LINEAR).astype('float32')
             img = img[:, :, (2,1,0)] # BGR to RGB
             img /= 255
             images.append(img)
@@ -246,7 +247,8 @@ class BaseGTUtility(object):
             prefix2 = os.path.join('', *s2[i:])
             
             gtu.image_path = os.path.join('', *s1[:i])
-            gtu.image_names =                     [os.path.join(prefix1, n) for n in gtu1.image_names] +                     [os.path.join(prefix2, n) for n in gtu2.image_names]
+            gtu.image_names = ([os.path.join(prefix1, n) for n in gtu1.image_names]
+                               + [os.path.join(prefix2, n) for n in gtu2.image_names])
             
         gtu.data = gtu1.data + gtu2.data
         if hasattr(gtu1, 'text') and hasattr(gtu2, 'text'):
@@ -291,12 +293,12 @@ class BaseGTUtility(object):
         for i in range(len(self.image_names)):
             boxes = []
             for j in range(len(self.data[i])):
-                #old_class_idx = np.argmax(self.data[i][j,-num_old_classes:])
+                # old_class_idx = np.argmax(self.data[i][j,-num_old_classes:])
                 old_class_idx = int(self.data[i][j,-1])
                 new_class_idx = old_to_new[old_class_idx]
                 if new_class_idx is not None:
-                    #class_one_hot = [0] * num_new_classes
-                    #class_one_hot[new_class_idx] = 1
+                    # class_one_hot = [0] * num_new_classes
+                    # class_one_hot[new_class_idx] = 1
                     box = self.data[i][j,:-1]
                     box = list(box) + [new_class_idx]
                     boxes.append(box)
@@ -312,10 +314,9 @@ class BaseGTUtility(object):
 
 
 class InputGenerator(object):
-    """Model input generator for data augmentation."""
-    # TODO
-    # flag to protect bounding boxes from cropping?
-    # crop range > 1.0? crop_area_range=[0.75, 1.25]
+    """
+    Model input generator for data augmentation.
+    """
     
     def __init__(self, gt_util, prior_util, batch_size, input_size,
                 preserve_aspect_ratio=True,
@@ -386,7 +387,6 @@ class InputGenerator(object):
         img_size = img.shape[:2]
         scale = np.random.randint(16)
         noise = np.array(np.random.exponential(scale, img_size), dtype=np.int) * np.random.randint(-1,2, size=img_size)
-        #noise = np.array(np.random.normal(0, scale, img_size), dtype=np.int)
         noise = np.repeat(noise[:, :, np.newaxis], 3, axis=2)
         img = img + noise
         return np.clip(img, 0, 255)
@@ -406,7 +406,7 @@ class InputGenerator(object):
         if np.random.random() < vflip_prob:
             img = img[::-1]
             num_coords = y.shape[1] - 1
-            if num_coords == 8: # polynom case
+            if num_coords == 8: # polygon case
                 y[:,[0,2,4,6]] = y[:,[6,4,2,0]]
                 y[:,[1,3,5,7]] = 1 - y[:,[7,5,3,1]]
             else:
@@ -443,17 +443,14 @@ class InputGenerator(object):
         new_img = img[y:y+h, x:x+w]
         num_coords = target.shape[1] - 1
         new_target = []
-        if num_coords == 8: # polynom case
+        if num_coords == 8: # polygon case
             for box in target:
                 new_box = np.copy(box)
                 new_box[0:8:2] -= x_rel
                 new_box[0:8:2] /= w_rel
                 new_box[1:8:2] -= y_rel
                 new_box[1:8:2] /= h_rel
-                
-                #new_box[0:8:2] = np.clip(new_box[0:8:2], 0, 1) # horizontal clip
-                #new_box[1:8:2] = np.clip(new_box[1:8:2], 0, 1) # vertical clip
-                
+
                 if (new_box[0] < 1 and new_box[6] < 1 and new_box[2] > 0 and new_box[4] > 0 and 
                     new_box[1] < 1 and new_box[3] < 1 and new_box[5] > 0 and new_box[7] > 0):
                     new_target.append(new_box)
@@ -535,7 +532,7 @@ class InputGenerator(object):
                 
                 if debug:
                     plt.figure(figsize=(12,6))
-                    # origal gt image
+                    # original gt image
                     plt.subplot(121)
                     dbg_img = np.copy(raw_img)
                     dbg_img /= 256
@@ -552,12 +549,10 @@ class InputGenerator(object):
                     plt.show()
                 
                 img -= mean[np.newaxis, np.newaxis, :]
-                #img = img / 25.6
                 
                 inputs.append(img)
                 targets.append(y)
-                
-                #if len(targets) == batch_size or j == len(idxs)-1: # last batch in epoch can be smaller then batch_size
+
                 if len(targets) == batch_size:
                     if encode:
                         targets = [self.prior_util.encode(y) for y in targets]
@@ -567,13 +562,14 @@ class InputGenerator(object):
                     inputs, targets = [], []
                     yield tmp_inputs, tmp_targets
                 elif j == len(idxs)-1:
-                    # forgett last batch
+                    # forget last batch
                     inputs, targets = [], []
                     break
 
 
 def pad_image(img, aspect_ratio, gt_data=None):
-    """Padds an image with random pixels to get one with specific 
+    """
+    Pads an image with random pixels to get one with specific
     aspect ratio while avoiding distortion of the image content.
     """
     src_h, src_w, src_c = img.shape
@@ -602,14 +598,15 @@ def pad_image(img, aspect_ratio, gt_data=None):
 
 
 def preprocess(img, size):
-    """Precprocess an image for ImageNet models.
+    """
+    Preprocess an image for ImageNet models.
     
     # Arguments
         img: Input Image
         size: Target image size (height, width).
     
     # Return
-        Resized and mean subtracted BGR image, if input was also BGR.
+        resized and mean subtracted BGR image, if input was also BGR.
     """
     h, w = size
     img = np.copy(img)
@@ -621,7 +618,8 @@ def preprocess(img, size):
 
 
 def preprocess_image(file_name, size=(384,384), lib='skimage'):
-    """Preprocess a given image for models trained on ImageNet.
+    """
+    Preprocess a given image for models trained on ImageNet.
         Does the following steps: load, resize, subtract mean
     # Arguments
         file_name: Path to source image file.
@@ -662,25 +660,10 @@ def preprocess_image(file_name, size=(384,384), lib='skimage'):
         img = img * (img_max - img_min) + img_min
         img = img.astype('float32')
         img *= 255 # the reference model operates on images in [0,255] range instead of [0,1]
-        img = img[:,:,(2,1,0)] # RGB to BGR
-    
-    #from IPython.display import display
-    #plt.imshow(img[:, :, (2,1,0)]/255.)
-    #display(plt.gcf())
-    #plt.close()
-    
-    #mean = np.array([103.939, 116.779, 123.68])
+        img = img[:, :, (2,1,0)] # RGB to BGR
+
     mean = np.array([104,117,123])
     img -= mean[np.newaxis, np.newaxis, :] # subtract mean
     
-    #print((img.shape, img.max(), input_img.min(), img[1,150,150]))
-    
     return img
-
-    # %%timeit
-    # pil:     3.57 ms ± 17 µs
-    # scipy:   5.33 ms ± 15.2 µs
-    # opencv:  2.24 ms ± 11.2 µs
-    # skimage: 8.81 ms ± 25.3 µs
-    # per loop (mean ± std. dev. of 7 runs, 100 loops each)
 

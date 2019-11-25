@@ -4,7 +4,8 @@ import numpy as np
 
 
 def iou(box, priors):
-    """Compute intersection over union for the box with all priors.
+    """
+    Compute intersection over union for the box with all priors.
     # Arguments
         box: Box, numpy tensor of shape (4,).
             (x1 + y1 + x2 + y2)
@@ -29,7 +30,8 @@ def iou(box, priors):
 
 
 def non_maximum_suppression_slow(boxes, confs, iou_threshold, top_k):
-    """Does None-Maximum Suppresion on detection results.
+    """
+    Does None-Maximum Suppresion on detection results.
     
     Intuitive but slow as hell!!!
     
@@ -55,7 +57,8 @@ def non_maximum_suppression_slow(boxes, confs, iou_threshold, top_k):
 
 
 def non_maximum_suppression(boxes, confs, overlap_threshold, top_k):
-    """Does None-Maximum Suppresion on detection results.
+    """
+    Does None-Maximum Suppresion on detection results.
     
     # Agruments
         boxes: Array of bounding boxes (boxes, xmin + ymin + xmax + ymax).
